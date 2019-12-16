@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+
+######################################################
+#
+# FOR DEVELOPMENT ONLY
+#
+######################################################
+
+from colorama import Fore, Style
+from subprocess import call, check_output
+import sqlite3
+import argparse
+
+INSERT_QUERY = "INSERT INTO tunnel (name, host, port, local_port, gateway, is_active) " \
+
+GATEWAY = ""
+CONNECTIONS = tuple()
+
+def read_conns():
+    return [{
+        'name': name,
+        'host': host,
+        'port': port,
+        'local_port': local_port,
+        'gateway': gateway,
+        'is_active': is_active,
+    } for name, host, port, local_port, gateway, is_active in CONNECTIONS]
+
+def db():
+    conn = sqlite3.connect('tunnel.db')
+    c = conn.cursor()
+    return conn, c
+
+def in_use(port):
+    return not call(["nc", "-z", "localhost", str(port)])
+
+def init(**kwargs):
+    conn, c = db()
+    print("Initializing database.")
+    c.execute("""CREATE TABLE IF NOT EXISTS tunnel (
+        name varchar(20) primary key,
+        host varchar(255),
+        port int,
+        local_port int,
+        gateway varchar(255),
+        is_active boolean default 0
+    )""")
+    try:
+        c.executemany(INSERT_QUERY, read_conns())
+        conn.commit()
+        print("Initialized database successfully.")
+    except Exception:
+        raise
+    finally:
+        conn.close()
+
+def add(**kwargs):
+    c, conn = db()
+    c.execute(INSERT_QUERY, dict(**kwargs, is_active=False,))
+    c.commit()
+    conn.close()
+
+def tunnel(names, **kwargs):
+    conn, c = db()
+
+    for name in names:
+        c.execute("""
+            SELECT * FROM tunnel WHERE name = ?
+        """, (name,))
+        name, host, port, local_port, gateway, is_active = c.fetchone()
+
+        if in_use(local_port):
+            raise Exception("Address already in use")
+
+        if not is_active:
+            print("Activate tunnel {}".format(name))
+            if 0 == call(["ssh", "-f", gateway, "-N",
+                     "-L", "{local_port}:{host}:{port}".format(
+                       gateway=gateway,
+                       local_port=local_port,
+                       host=host,
+                       port=port)
+                     ]):
+                c.execute("UPDATE tunnel SET is_active=1 WHERE name=?", (name,))
+                conn.commit()
+                conn.close()
+                print("Activated.")
+            else:
+                raise Exception("Tunnel failed")
+        else:
+            raise Exception("Tunnel already enabled")
+
+def ls(status, **kwargs):
+    conn, c = db()
+    cons = ["1"]
+    if status != "all":
+        cons.append("is_active={}".format(1 if status == "up" else 0))
+
+    c.execute("SELECT name, local_port, is_active FROM tunnel WHERE {cons}".format(
+        cons=" AND ".join(cons)))
+
+    for row in c.fetchall():
+        print("{0}:{1} {a}{END}".format(*row, a=Fore.GREEN + "✔️ " if row[2] else Fore.RED + "❌ ", END=Style.RESET_ALL))
+
+def distun(names, force, **kwargs):
+    conn, c = db()
+    try:
+        for name in names:
+            c.execute("SELECT name, local_port FROM tunnel WHERE name=? AND is_active=1", (name,))
+            t = c.fetchone()
+
+            def deactivate():
+                c.execute("UPDATE tunnel SET is_active=0 WHERE name=?", (name,))
+
+            if not t and not force:
+                raise Exception("Tunnel '{}' not exist or disabled".format(name))
+
+            deactivate()
+            conn.commit()
+            if not in_use(t[1]):
+                raise Exception("Address not in use")
+
+            pid = check_output(["lsof", "-t", "-i:{}".format(t[1])]).strip()
+            if 0 == call(["kill", pid]):
+                print("Disconnected from {}".format(name))
+    except Exception:
+        if not force:
+            raise
+    finally:
+        conn.close()
+
+# Handle args
+parser = argparse.ArgumentParser(description="Tunnel manager", prog="tunnel", argument_default="tunnel")
+
+subparsers = parser.add_subparsers(help="Commands")
+subparser_init = subparsers.add_parser("init", help="Set up default settings")
+subparser_init.set_defaults(function=init)
+
+subparser_add = subparsers.add_parser("add", help="Add tunnel configurations")
+subparser_add.add_argument("-n", "--name", help="Name", required=True)
+subparser_add.add_argument("-H", "--host", help="Remote host", required=True)
+subparser_add.add_argument("-p", "--port", help="Remote port", required=True)
+subparser_add.add_argument("-l", "--local-port", help="Local port", required=True)
+subparser_add.add_argument("-g", "--gateway", help="Gateway", required=True)
+subparser_add.set_defaults(function=add)
+
+subparser_ls = subparsers.add_parser("ls", help="List tunnels")
+subparser_ls.add_argument("-s", "--status", help="tunnel names", choices=["up", "down", "all"],
+                          required=False, default="all")
+subparser_ls.set_defaults(function=ls)
+
+subparser_up = subparsers.add_parser("up", help="Activate tunnel")
+subparser_up.add_argument("names", nargs='+', help="tunnel names")
+subparser_up.set_defaults(function=tunnel)
+
+subparser_down = subparsers.add_parser("down", help="Disconnect tunnels")
+subparser_down.add_argument("names", nargs='+', help="tunnel names")
+subparser_down.add_argument("-f", "--force", required=False, action="store_true", help="Force close")
+subparser_down.set_defaults(function=distun)
+
+args = parser.parse_args()
+# End Handle args
+
+if __name__ == "__main__":
+    try:
+        function = getattr(args, 'function', None)
+        if not function:
+            parser.print_help()
+        else:
+            function(**vars(args))
+    except Exception as e:
+        print("Error: {}".format(e))
+        exit(1)
+
+    exit(0)
+
+
+# vim:ts=4:sw=4
