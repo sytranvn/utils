@@ -32,6 +32,7 @@ scheduler:9073 ❌
 
 ## Require
 - python3
+- sqlite3
 
 ## Install
 - Add contain folder to `PATH`
@@ -40,8 +41,8 @@ scheduler:9073 ❌
 
 ## Platform
 
-| | Linux | Window | Mac |
-|--|--|--|--|
-|Tested| ✔️  | ❌ | ❌ |
+| | Linux | Mac |
+|--|--|--|
+|Tested| ✔️ | ❌ |
 
 # OTHERS
