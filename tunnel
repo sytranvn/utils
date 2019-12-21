@@ -22,19 +22,10 @@ GREEN = '\x1b[32m'
 RED = '\x1b[31m'
 RESET_ALL = '\x1b[0m'
 
-def read_conns():
-    return [{
-        'name': name,
-        'host': host,
-        'port': port,
-        'local_port': local_port,
-        'gateway': gateway,
-        'is_active': is_active,
-    } for name, host, port, local_port, gateway, is_active in CONNECTIONS]
-
 def db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
+    conn.set_trace_callback(None)
     return conn, c
 
 def in_use(port):
@@ -71,6 +62,33 @@ def add(**kwargs):
     c.commit()
     conn.close()
 
+def ls(status, **kwargs):
+    conn, c = db()
+    cons = ["1"]
+    if status != "all":
+        cons.append("is_active={}".format(1 if status == "up" else 0))
+
+    c.execute("SELECT name, local_port, is_active FROM tunnel WHERE {cons} ORDER BY is_active DESC".format(
+        cons=" AND ".join(cons)))
+
+    for row in c.fetchall():
+        print("{0}:{1} {a}{END}".format(*row, a=GREEN + "✔️ " if row[2] else RED + "❌ ", END=RESET_ALL))
+
+def edit(name=None, **kwargs):
+    conn, c = db()
+    if not name:
+        return
+    new_values = []
+    for k in kwargs:
+        if kwargs[k] is not None:
+            new_values += ["{k} = :{k}".format(k=k)]
+    if new_values:
+        q = "UPDATE tunnel SET {new_values} WHERE name = :name".format(
+                new_values=",".join(new_values))
+        conn.execute(q, dict(kwargs, name=name[0]))
+        conn.commit()
+        conn.close()
+
 def tunnel(names, **kwargs):
     conn, c = db()
 
@@ -92,29 +110,15 @@ def tunnel(names, **kwargs):
                        host=host,
                        port=port)
                      ]):
-                c.execute("UPDATE tunnel SET is_active=1 WHERE name=?", (name,))
-                conn.commit()
+                edit(name=[name], is_active=False)
                 print("Activated.")
             else:
                 conn.close()
                 raise Exception("Tunnel failed")
         else:
-            conn.close()
-            raise Exception("Tunnel already enabled")
+            print("Tunnel already enabled")
 
     conn.close()
-
-def ls(status, **kwargs):
-    conn, c = db()
-    cons = ["1"]
-    if status != "all":
-        cons.append("is_active={}".format(1 if status == "up" else 0))
-
-    c.execute("SELECT name, local_port, is_active FROM tunnel WHERE {cons} ORDER BY is_active DESC".format(
-        cons=" AND ".join(cons)))
-
-    for row in c.fetchall():
-        print("{0}:{1} {a}{END}".format(*row, a=GREEN + "✔️ " if row[2] else RED + "❌ ", END=RESET_ALL))
 
 def distun(names, force, **kwargs):
     conn, c = db()
@@ -125,14 +129,10 @@ def distun(names, force, **kwargs):
             t = c.fetchone()
             local_port, is_active = t if t else (None,None)
 
-            def deactivate():
-                c.execute("UPDATE tunnel SET is_active=0 WHERE name=?", (name,))
-
             if not is_active and not force:
                 raise Exception("Tunnel '{}' not exist or disabled".format(name))
 
-            deactivate()
-            conn.commit()
+            edit(name=[name], is_active=False)
 
             if not in_use(local_port):
                 raise Exception("Address not in use")
@@ -170,6 +170,13 @@ parser_configs = (
       ("-p", "--port", dict(required=True, help="Port")),
       ("-l", "--local_port", dict(required=True, help="Local port")),
       ("-g", "--gateway", dict(required=True, help="Gateway"))]),
+    (("edit", dict(help="Edit tunnel configurations")),
+     edit,
+     [("name", dict(nargs=1, help="Name")),
+      ("-H", "--host", dict(required=False, help="Host")),
+      ("-p", "--port", dict(required=False, help="Port")),
+      ("-l", "--local_port", dict(required=False, help="Local port")),
+      ("-g", "--gateway", dict(required=False, help="Gateway"))]),
     (("ls", dict(help="List tunnels")),
      ls,
      [("-s", "--status", dict(help="tunnel names", choices=["up", "down", "all"], required=False, default="all"))]),
@@ -204,7 +211,9 @@ if __name__ == "__main__":
             parser.print_help()
             exit(1)
         else:
-            function(**vars(args))
+            true_args = vars(args)
+            true_args.pop('function')
+            function(**true_args)
     except Exception as e:
         print("Error: {}".format(e))
         exit(1)
