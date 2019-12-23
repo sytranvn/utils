@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+connect_unified() {
+	errmsg=$(nmcli connection up id Unified 2>&1)
+	if [[ $? != 0 ]]; then
+		echo "$errmsg"
+		if [[ $errmsg == "Error: Connection activation failed: Connection 'Unified' is already active" ]]; then
+			sleep 1200
+		else
+			sleep 20
+		fi;
+	else
+		sleep 1200
+	fi
+}
+
+while true ; do
+	connect_unified; test $? -gt 128 && break;
+done

@@ -1,6 +1,6 @@
 _tunnel_py()
 {
-    local opts="init add ls up down" i=1
+    local opts="init add ls up down edit" i=1
 
     case ${COMP_WORDS[i]} in
         init)
@@ -17,6 +17,16 @@ _tunnel_py()
                 opts=""
             fi
             ;;
+        edit)
+            if [[ COMP_CWORD == 2 ]]; then
+                opts=$(tunnel ls | cut -d ':' -f1)
+            elif [[ $(( COMP_CWORD % 2 )) == 1 ]]; then
+                opts="-H -p -l -g --host --port --local-port --gateway"
+            else
+                opts=""
+            fi
+            ;;
+
         ls)
             if [[ $i -eq "$COMP_CWORD - 1" ]]; then
                 opts="-s"
