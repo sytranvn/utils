@@ -110,7 +110,7 @@ def tunnel(names, **kwargs):
                        host=host,
                        port=port)
                      ]):
-                edit(name=[name], is_active=False)
+                edit(name=[name], is_active=True)
                 print("Activated.")
             else:
                 conn.close()
