@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+tb=$1
+test -z $tb && echo 'usage: readtb <table>\n\tDump table data to stdout.' && exit 1
+
+if [ -f $UNIFIED_HOME/.envrc ]; then
+  . $UNIFIED_HOME/.envrc
+fi
+
+psql $RDS_REPORTING_DATABASE -c "COPY $tb TO stdout" 

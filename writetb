@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+tb=$1
+shift
+test -z $tb && echo -e 'usage: writetb <table>\n\tPipe data of readtb to table' && exit 1
+psql "$@" -c "COPY $tb FROM stdin"

@@ -16,7 +16,7 @@ connect_unified() {
 
 vpn=$1
 shift
-test -z $vpn && echo 'No vpn.' && exit 1
+test -z $vpn && echo -e 'usage: stay-alive <vpn_name>\n\tKeep connection to vpn. Pipe output to file or /dev/null to ignore log.' && exit 1
 
 while true ; do
 	connect_unified $vpn; test $? -gt 128 && break;

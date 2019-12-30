@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+tb=$1
+shift
+test -z $tb && echo 'usage: schem <table>\n\tPrint table schema.' && exit 1
+
+if [ -f $UNIFIED_HOME/.envrc ]; then
+  . $UNIFIED_HOME/.envrc
+fi
+
+pg_dump -t $tb --schema-only $RDS_REPORTING_DATABASE 
+
