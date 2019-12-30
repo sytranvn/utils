@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 connect_unified() {
-	errmsg=$(nmcli connection up id Unified 2>&1)
+	errmsg=$(nmcli connection up id $1 2>&1)
 	if [[ $? != 0 ]]; then
 		echo "$errmsg"
-		if [[ $errmsg == "Error: Connection activation failed: Connection 'Unified' is already active" ]]; then
+		if [[ $errmsg == "Error: Connection activation failed: Connection '$1' is already active" ]]; then
 			sleep 1200
 		else
 			sleep 20
@@ -14,6 +14,10 @@ connect_unified() {
 	fi
 }
 
+vpn=$1
+shift
+test -z $vpn && echo 'No vpn.' && exit 1
+
 while true ; do
-	connect_unified; test $? -gt 128 && break;
+	connect_unified $vpn; test $? -gt 128 && break;
 done

@@ -12,12 +12,13 @@ import argparse
 import os
 import configparser
 
+DEFAULT_USER = os.environ.get('USER')
 DIR = os.path.dirname(os.path.realpath(__file__))
 DB  = os.path.join(DIR, "tunnel.db")
 INI = os.path.join(DIR, "config.ini")
 COMSH = os.path.join(DIR, "tunnel-complete.sh")
-INSERT_QUERY = "INSERT INTO tunnel (name, host, port, local_port, gateway, is_active) " \
-               "VALUES (:name, :host, :port, :local_port, :gateway, :is_active);"
+INSERT_QUERY = "INSERT INTO tunnel (user, name, host, port, local_port, gateway, is_active) " \
+               "VALUES (:user, :name, :host, :port, :local_port, :gateway, :is_active);"
 GREEN = '\x1b[32m'
 RED = '\x1b[31m'
 RESET_ALL = '\x1b[0m'
@@ -36,11 +37,12 @@ def init(file=None, **kwargs):
     ini = file or INI
     cfg = configparser.ConfigParser()
     cfg.read_file(open(ini))
-    conns = [dict(name=name, **cf) for name, cf in cfg.items() if cf]
+    conns = [dict(name=name, user=None, **cf) for name, cf in cfg.items() if cf]
 
     print("Initializing database.")
     c.execute("""CREATE TABLE IF NOT EXISTS tunnel (
         name varchar(20) primary key,
+        user varchar(255),
         host varchar(255),
         port int,
         local_port int,
@@ -94,16 +96,17 @@ def tunnel(names, **kwargs):
 
     for name in names:
         c.execute("""
-            SELECT * FROM tunnel WHERE name = ?
+            SELECT user, name, host, port, local_port, gateway, is_active 
+            FROM tunnel WHERE name = ?
         """, (name,))
-        name, host, port, local_port, gateway, is_active = c.fetchone()
+        user, name, host, port, local_port, gateway, is_active = c.fetchone()
 
         if in_use(local_port):
             raise Exception("Address already in use")
 
         if not is_active:
             print("Activate tunnel {}".format(name))
-            if 0 == call(["ssh", "-f", gateway, "-N",
+            if 0 == call(["ssh", "-f", "{}@{}".format(user or DEFAULT_USER, gateway), "-N",
                      "-L", "{local_port}:{host}:{port}".format(
                        gateway=gateway,
                        local_port=local_port,
@@ -165,14 +168,16 @@ parser_configs = (
      [("-f", "--file", dict(nargs=1, help="configuration file (default=./config.ini)"))]),
     (("add", dict(help="Add tunnel configurations")),
      add,
-     [("-n", "--name", dict(required=True, help="Name")),
+     [("name", dict(help="Name")),
+      ("-u", "--user", dict(required=False, help="User")),
       ("-H", "--host", dict(required=True, help="Host")),
       ("-p", "--port", dict(required=True, help="Port")),
       ("-l", "--local_port", dict(required=True, help="Local port")),
       ("-g", "--gateway", dict(required=True, help="Gateway"))]),
     (("edit", dict(help="Edit tunnel configurations")),
      edit,
-     [("name", dict(nargs=1, help="Name")),
+     [("name", dict(help="Name")),
+      ("-u", "--user", dict(required=False, help="User")),
       ("-H", "--host", dict(required=False, help="Host")),
       ("-p", "--port", dict(required=False, help="Port")),
       ("-l", "--local_port", dict(required=False, help="Local port")),
