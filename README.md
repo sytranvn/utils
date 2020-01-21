@@ -62,7 +62,8 @@ $ writetb <table> [psql options]
 ```
 
 # OTHERS
+![kcn](img/kcn.gif)
 ```shell script
-$ stay-alive <connection_name>
-    Keep connection alive
+$ kcn CONNECTION [TIME]
+    Up CONNECTION every TIME minutes
 ```

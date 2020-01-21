@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+connect_unified() {
+	if nmcli -f general.STATE connection show id $1 | grep -q activated ; then
+		echo 'Activated.'
+		sleep $(( 60 * $2 ))
+	elif nmcli -f general.STATE connection show id $1 | grep -q activating ; then
+		echo 'Activating. Recheck in 10 seconds'
+		sleep 10
+	else
+		echo "Not activated. Connecting..."
+		nmcli connection up id $1 || sleep $(( 60* $2 ))
+	fi
+}
+
+vpn=$1
+t=${2:-5}
+
+shift
+test -z $vpn && echo -e "usage: $(basename $0) CONNECTION TIME\n\tCheck and reconnect to CONNECTION every TIME minutes." && exit 1
+
+echo -e "\nCtrl + C to exit."
+while true ; do
+	connect_unified $vpn $t; test $? -gt 128 && break;
+done
